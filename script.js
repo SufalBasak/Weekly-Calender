@@ -48,11 +48,16 @@ function setupEventListeners() {
     // Close modal on outside click (excluding menu clicks)
     window.addEventListener('click', (e) => {
         const modal = document.getElementById('eventModal');
+        const docModal = document.getElementById('docModal');
         const menu = document.getElementById('moreOptionsMenu');
         const menuBtn = document.querySelector('button[onclick="toggleMoreOptions()"]');
 
         if (e.target === modal) {
             closeModal();
+        }
+
+        if (e.target === docModal) {
+            closeDocModal();
         }
 
         // Close menu if clicking outside
@@ -309,7 +314,7 @@ function createEventElement(task) {
             <div style="flex: 1; min-width: 0;">
                 <strong style="display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(task.title)}</strong>
                 <small>${task.startTime || ''} - ${task.endTime || ''}</small>
-                ${task.hasMeet ? '<br><i class="fa-solid fa-video" style="font-size: 10px; margin-top: 2px;"></i>' : ''}
+                ${task.meetLink ? `<br><a href="${task.meetLink}" target="_blank" style="text-decoration:none; color:inherit;"><i class="fa-solid fa-video" style="font-size: 10px; margin-top: 2px; color: #1a73e8;"></i></a>` : ''}
             </div>
         </div>
     `;
@@ -342,9 +347,24 @@ function toggleComplete(taskId) {
 // --- Modal & Create Logic ---
 
 // Toggle Meet Link UI
-function toggleMeetLink(forceState = null) {
+function generateMeetLink() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz';
+    const segment = (length) => {
+        let text = '';
+        for (let i = 0; i < length; i++) {
+            text += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return text;
+    };
+    return `meet.google.com/${segment(3)}-${segment(4)}-${segment(3)}`;
+}
+
+let currentMeetLink = ''; // Temp store for current modal session
+
+function toggleMeetLink(forceState = null, loadLink = null) {
     const btn = document.getElementById('addMeetBtn');
     const display = document.getElementById('meetLinkDisplay');
+    const linkText = display.querySelector('.meet-url');
 
     // If forceState is provided (true = show link, false = show button)
     // If null, toggle based on current display
@@ -353,9 +373,18 @@ function toggleMeetLink(forceState = null) {
     if (showLink) {
         btn.style.display = 'none';
         display.classList.remove('hidden');
+
+        // If loading an existing link, use it. Otherwise generate new one if none exists in session.
+        if (loadLink) {
+            currentMeetLink = loadLink;
+        } else if (!currentMeetLink) {
+            currentMeetLink = generateMeetLink();
+        }
+        linkText.textContent = currentMeetLink;
     } else {
         btn.style.display = 'flex';
         display.classList.add('hidden');
+        if (!loadLink) currentMeetLink = ''; // Clear if manually removed (unless just hiding UI? No, usually remove means clear)
     }
 }
 
@@ -413,7 +442,12 @@ function openModal(editId = null, prefillDate = null) {
             modalLocation.value = task.location || ''; // Load location
 
             // Load Meet Link Status
-            if (task.hasMeet) toggleMeetLink(true);
+            currentMeetLink = ''; // Reset
+            if (task.meetLink) {
+                toggleMeetLink(true, task.meetLink);
+            } else {
+                toggleMeetLink(false);
+            }
 
             // Set Type
             let type = task.type || 'event';
@@ -428,6 +462,9 @@ function openModal(editId = null, prefillDate = null) {
         }
     } else {
         // Create Mode
+        currentMeetLink = '';
+        toggleMeetLink(false);
+
         modalEditId.value = '';
         modalTitle.value = '';
         modalDesc.value = '';
@@ -507,7 +544,9 @@ function saveTaskFromModal() {
 
     // Check Meet Link State (if display is visible)
     const meetDisplay = document.getElementById('meetLinkDisplay');
+    const meetInput = document.getElementById('meetLinkInput');
     const hasMeet = meetDisplay && !meetDisplay.classList.contains('hidden');
+    const meetLink = hasMeet && meetInput ? meetInput.value.trim() : null;
 
     if (!title) {
         alert("Please add a title");
@@ -537,7 +576,7 @@ function saveTaskFromModal() {
             tasks[index].description = desc;
             tasks[index].type = type;
             tasks[index].location = location; // Save Location
-            tasks[index].hasMeet = hasMeet;   // Save Meet Status
+            tasks[index].meetLink = meetLink;
         }
     } else {
         const newTask = {
@@ -550,7 +589,7 @@ function saveTaskFromModal() {
             completed: false,
             type: type,
             location: location,
-            hasMeet: hasMeet
+            meetLink: meetLink
         };
         tasks.push(newTask);
     }
